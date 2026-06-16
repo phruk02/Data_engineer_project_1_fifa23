@@ -1,0 +1,460 @@
+from airflow import DAG
+from airflow.decorators import task
+from datetime import datetime
+from sqlalchemy import create_engine, text
+
+DB_URL = "postgresql+psycopg2://airflow:airflow@postgres:5432/airflow"
+
+with DAG(
+    dag_id="firstclean_fifa23_players_legacy_v2",
+    schedule=None,
+    start_date=datetime(2026, 6, 6),
+    catchup=False,
+    tags=["fifa23_legacy", "silver", "v2"],
+) as dag:
+
+    @task
+    def create_first_clean_base():
+        engine = create_engine(DB_URL)
+
+        sql = """
+        CREATE TABLE fifa23_silver.silver_players_legacy (
+            player_id BIGINT NOT NULL,
+            fifa_version BIGINT NOT NULL,
+            fifa_update BIGINT NOT NULL,
+            fifa_update_date TEXT,
+            player_url TEXT,
+            player_face_url TEXT,
+
+            short_name TEXT NOT NULL,
+            long_name TEXT,
+            player_positions TEXT,
+
+            overall BIGINT CHECK (overall BETWEEN 1 AND 99 OR overall IS NULL),
+            potential BIGINT CHECK (potential BETWEEN 1 AND 99 OR potential IS NULL),
+            age BIGINT CHECK (age BETWEEN 15 AND 50 OR age IS NULL),
+            dob TEXT,
+            height_cm BIGINT,
+            weight_kg BIGINT,
+
+            league_id BIGINT,
+            league_name TEXT,
+            league_level DOUBLE PRECISION,
+
+            club_team_id BIGINT,
+            club_name TEXT,
+            club_position TEXT,
+            club_jersey_number BIGINT,
+            club_loaned_from TEXT,
+            club_joined_date TEXT,
+            club_contract_valid_until_year DOUBLE PRECISION,
+
+            nationality_id BIGINT,
+            nationality_name TEXT,
+
+            nation_team_id BIGINT,
+            nation_position TEXT,
+            nation_jersey_number BIGINT,
+
+            preferred_foot TEXT,
+            weak_foot BIGINT,
+            skill_moves BIGINT,
+            international_reputation BIGINT,
+            work_rate TEXT,
+            body_type TEXT,
+            real_face TEXT,
+
+            value_eur DOUBLE PRECISION,
+            wage_eur DOUBLE PRECISION,
+            release_clause_eur DOUBLE PRECISION,
+
+            player_tags TEXT,
+            player_traits TEXT,
+
+            pace BIGINT,
+            shooting BIGINT,
+            passing BIGINT,
+            dribbling BIGINT,
+            defending BIGINT,
+            physic BIGINT,
+
+            attacking_crossing BIGINT,
+            attacking_finishing BIGINT,
+            attacking_heading_accuracy BIGINT,
+            attacking_short_passing BIGINT,
+            attacking_volleys BIGINT,
+
+            skill_dribbling BIGINT,
+            skill_curve BIGINT,
+            skill_fk_accuracy BIGINT,
+            skill_long_passing BIGINT,
+            skill_ball_control BIGINT,
+
+            movement_acceleration BIGINT,
+            movement_sprint_speed BIGINT,
+            movement_agility BIGINT,
+            movement_reactions BIGINT,
+            movement_balance BIGINT,
+
+            power_shot_power BIGINT,
+            power_jumping BIGINT,
+            power_stamina BIGINT,
+            power_strength BIGINT,
+            power_long_shots BIGINT,
+
+            mentality_aggression BIGINT,
+            mentality_interceptions BIGINT,
+            mentality_positioning BIGINT,
+            mentality_vision BIGINT,
+            mentality_penalties BIGINT,
+            mentality_composure BIGINT,
+
+            defending_marking_awareness BIGINT,
+            defending_standing_tackle BIGINT,
+            defending_sliding_tackle BIGINT,
+
+            goalkeeping_diving BIGINT,
+            goalkeeping_handling BIGINT,
+            goalkeeping_kicking BIGINT,
+            goalkeeping_positioning BIGINT,
+            goalkeeping_reflexes BIGINT,
+            goalkeeping_speed BIGINT,
+
+            ls TEXT, st TEXT, rs TEXT,
+            lw TEXT, lf TEXT, cf TEXT, rf TEXT, rw TEXT,
+            lam TEXT, cam TEXT, ram TEXT,
+            lm TEXT, lcm TEXT, cm TEXT, rcm TEXT, rm TEXT,
+            lwb TEXT, ldm TEXT, cdm TEXT, rdm TEXT, rwb TEXT,
+            lb TEXT, lcb TEXT, cb TEXT, rcb TEXT, rb TEXT,
+            gk TEXT,
+
+            source_file TEXT,
+            chunk_no BIGINT,
+
+            PRIMARY KEY (player_id, fifa_version, fifa_update)
+        );
+        """
+
+        sql2 = """
+        CREATE TABLE fifa23_gold.dim_league (
+            league_id BIGINT PRIMARY KEY,
+            league_name TEXT NOT NULL
+        );
+
+        CREATE TABLE fifa23_gold.dim_nationality (
+            nationality_id BIGINT PRIMARY KEY,
+            nationality_name TEXT NOT NULL
+        );
+        """
+
+        insert_sql = """
+        WITH cleaned AS (
+            SELECT
+                player_id,
+                fifa_version,
+                fifa_update,
+                TO_DATE(NULLIF(TRIM(fifa_update_date), ''), 'YYYY-MM-DD') AS fifa_update_date,
+                NULLIF(TRIM(player_url), '') AS player_url,
+                NULLIF(TRIM(player_face_url), '') AS player_face_url,
+                NULLIF(TRIM(short_name), '') AS short_name,
+                NULLIF(TRIM(long_name), '') AS long_name,
+                NULLIF(TRIM(player_positions), '') AS player_positions,
+
+                overall,
+                potential,
+                age,
+                TO_DATE(NULLIF(TRIM(dob), ''), 'YYYY-MM-DD') AS dob,
+                height_cm,
+                weight_kg,
+
+                league_id,
+                COALESCE(NULLIF(TRIM(league_name), ''), 'Unknown') AS league_name,
+                league_level,
+
+                club_team_id,
+                COALESCE(NULLIF(TRIM(club_name), ''), 'Free Agent') AS club_name,
+                NULLIF(TRIM(club_position), '') AS club_position,
+                club_jersey_number,
+                NULLIF(TRIM(club_loaned_from), '') AS club_loaned_from,
+                NULLIF(TRIM(club_joined_date), '') AS club_joined_date,
+                NULLIF(TRIM(club_contract_valid_until_year::TEXT), '')::INT AS club_contract_valid_until_year,
+
+                nationality_id,
+                NULLIF(TRIM(nationality_name), '') AS nationality_name,
+
+                nation_team_id,
+                NULLIF(TRIM(nation_position), '') AS nation_position,
+                nation_jersey_number,
+
+                NULLIF(TRIM(preferred_foot), '') AS preferred_foot,
+                weak_foot,
+                skill_moves,
+                international_reputation,
+                NULLIF(TRIM(work_rate), '') AS work_rate,
+                NULLIF(TRIM(body_type), '') AS body_type,
+                real_face,
+
+                value_eur,
+                wage_eur,
+                release_clause_eur,
+
+                player_tags,
+                player_traits,
+
+                pace,
+                shooting,
+                passing,
+                dribbling,
+                defending,
+                physic,
+
+                attacking_crossing,
+                attacking_finishing,
+                attacking_heading_accuracy,
+                attacking_short_passing,
+                attacking_volleys,
+
+                skill_dribbling,
+                skill_curve,
+                skill_fk_accuracy,
+                skill_long_passing,
+                skill_ball_control,
+
+                movement_acceleration,
+                movement_sprint_speed,
+                movement_agility,
+                movement_reactions,
+                movement_balance,
+
+                power_shot_power,
+                power_jumping,
+                power_stamina,
+                power_strength,
+                power_long_shots,
+
+                mentality_aggression,
+                mentality_interceptions,
+                mentality_positioning,
+                mentality_vision,
+                mentality_penalties,
+                mentality_composure,
+
+                defending_marking_awareness,
+                defending_standing_tackle,
+                defending_sliding_tackle,
+
+                goalkeeping_diving,
+                goalkeeping_handling,
+                goalkeeping_kicking,
+                goalkeeping_positioning,
+                goalkeeping_reflexes,
+                goalkeeping_speed,
+
+                ls, st, rs,
+                lw, lf, cf, rf, rw,
+                lam, cam, ram,
+                lm, lcm, cm, rcm, rm,
+                lwb, ldm, cdm, rdm, rwb,
+                lb, lcb, cb, rcb, rb,
+                gk,
+
+                NULLIF(TRIM(source_file), '') AS source_file,
+                chunk_no
+            FROM fifa23_raw.raw_male_players_legacy
+            WHERE player_id IS NOT NULL
+              AND fifa_version IS NOT NULL
+              AND fifa_update IS NOT NULL
+              AND short_name IS NOT NULL
+              AND overall BETWEEN 1 AND 99
+              AND potential BETWEEN 1 AND 99
+              AND age BETWEEN 15 AND 50
+              AND height_cm BETWEEN 100 AND 250
+              AND weight_kg BETWEEN 40 AND 200
+        ),
+        ranked AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY
+                        player_id,
+                        fifa_version,
+                        fifa_update
+                    ORDER BY
+                        fifa_update_date DESC NULLS LAST,
+                        source_file,
+                        chunk_no
+                ) AS rn
+            FROM cleaned
+        )
+        INSERT INTO fifa23_silver.silver_players_legacy
+        SELECT
+            player_id,
+            fifa_version,
+            fifa_update,
+            fifa_update_date,
+            player_url,
+            player_face_url,
+
+            short_name,
+            long_name,
+            player_positions,
+
+            overall,
+            potential,
+            age,
+            dob,
+            height_cm,
+            weight_kg,
+
+            league_id,
+            league_name,
+            league_level,
+
+            club_team_id,
+            club_name,
+            club_position,
+            club_jersey_number,
+            club_loaned_from,
+            club_joined_date,
+            club_contract_valid_until_year,
+
+            nationality_id,
+            nationality_name,
+
+            nation_team_id,
+            nation_position,
+            nation_jersey_number,
+
+            preferred_foot,
+            weak_foot,
+            skill_moves,
+            international_reputation,
+            work_rate,
+            body_type,
+            real_face,
+
+            value_eur,
+            wage_eur,
+            release_clause_eur,
+
+            player_tags,
+            player_traits,
+
+            pace,
+            shooting,
+            passing,
+            dribbling,
+            defending,
+            physic,
+
+            attacking_crossing,
+            attacking_finishing,
+            attacking_heading_accuracy,
+            attacking_short_passing,
+            attacking_volleys,
+
+            skill_dribbling,
+            skill_curve,
+            skill_fk_accuracy,
+            skill_long_passing,
+            skill_ball_control,
+
+            movement_acceleration,
+            movement_sprint_speed,
+            movement_agility,
+            movement_reactions,
+            movement_balance,
+
+            power_shot_power,
+            power_jumping,
+            power_stamina,
+            power_strength,
+            power_long_shots,
+
+            mentality_aggression,
+            mentality_interceptions,
+            mentality_positioning,
+            mentality_vision,
+            mentality_penalties,
+            mentality_composure,
+
+            defending_marking_awareness,
+            defending_standing_tackle,
+            defending_sliding_tackle,
+
+            goalkeeping_diving,
+            goalkeeping_handling,
+            goalkeeping_kicking,
+            goalkeeping_positioning,
+            goalkeeping_reflexes,
+            goalkeeping_speed,
+
+            ls, st, rs,
+            lw, lf, cf, rf, rw,
+            lam, cam, ram,
+            lm, lcm, cm, rcm, rm,
+            lwb, ldm, cdm, rdm, rwb,
+            lb, lcb, cb, rcb, rb,
+            gk,
+
+            source_file,
+            chunk_no
+        FROM ranked
+        WHERE rn = 1;
+        """
+
+        insert_sql2 = """
+        INSERT INTO fifa23_gold.dim_league (
+            league_id,
+            league_name
+        )
+        SELECT
+            league_id,
+            MAX(league_name) AS league_name
+        FROM (
+            SELECT league_id, league_name
+            FROM fifa23_raw.raw_male_teams
+
+            UNION ALL
+
+            SELECT league_id, league_name
+            FROM fifa23_raw.raw_male_players_legacy
+        ) x
+        WHERE league_id IS NOT NULL
+        GROUP BY league_id;
+
+        INSERT INTO fifa23_gold.dim_nationality (
+            nationality_id,
+            nationality_name
+        )
+        SELECT
+            nationality_id,
+            MAX(nationality_name) AS nationality_name
+        FROM (
+            SELECT nationality_id, nationality_name
+            FROM fifa23_raw.raw_male_players_legacy
+
+            UNION ALL
+
+            SELECT nationality_id, nationality_name
+            FROM fifa23_raw.raw_male_teams
+
+            UNION ALL
+
+            SELECT nationality_id, nationality_name
+            FROM fifa23_raw.raw_male_coaches
+        ) x
+        WHERE nationality_id IS NOT NULL
+        GROUP BY nationality_id;
+        """
+
+        with engine.begin() as conn:
+            conn.execute(text("""DROP TABLE IF EXISTS fifa23_silver.silver_players_legacy CASCADE;"""))
+            conn.execute(text("""DROP TABLE IF EXISTS fifa23_gold.dim_nationality CASCADE;"""))
+            conn.execute(text("""DROP TABLE IF EXISTS fifa23_gold.dim_league CASCADE;"""))
+            conn.execute(text(sql))
+            conn.execute(text(sql2))
+            conn.execute(text(insert_sql))
+            conn.execute(text(insert_sql2))
+
+    create_first_clean_base()

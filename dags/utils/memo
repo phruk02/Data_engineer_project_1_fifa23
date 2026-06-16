@@ -1,0 +1,59 @@
+FIFA23 Data Engineering Pipeline explained
+
+Project Overview
+This is an End-to-end FIFA23 data pipeline using tools below :
+- Kafka
+- PostgreSQL
+- Airflow
+- Python
+- SQLAlchemy
+
+The objective is to partially upload the fifa23 to postgres database using Kafka. Then use python to create ETL pipeline to clean and transform the data and SQLAlchemy to connect to Database while also make it able for automation by using apache airflow as orchestration tool. However in this project I decide to set it to on off to be easy to track down errors.
+
+In this Fifa23 there are total of 4 datasets 
+-male_coaches
+-male_players
+-male_players_legacy
+-male_team
+
+Firtly, I ingest raw CSV files to DB naming it raw_x_x. I also add column name chunk_no and source_file so it can be easier to debug. Each batch has 5000 rows there is also a function named flush_buffer() to make sure that the last batch will be flooded even though it does not have 5000 rows
+
+ingesting codes are located in airflow/scripts/fifa_23
+
+
+Silver Layer
+
+then I create silver layer in order to remove duplicate rows and to filter out NULL columns from the column that can't contain NULL (Ex.Primary Key row like player_id).And filter out rows that have values out of the range they should be in for example negative club value.
+
+in this layer id is still not a primary key hence each id still has various versions and updates.
+
+
+Examples:
+- silver_players_legacy
+- silver_male_teams
+- cleaned_male_coaches
+
+Ps. I decide to skip male_players since it has the same schemas as male_players_legacy so there will only be 3 silver tables
+
+
+Gold layer
+
+In gold layer I store table based on catagories to be easier to do business-oriented analytics.
+This layer I only keep rows where the version is fifa 23 and latest update so id can now be primary keys in my tables.
+
+Examples:
+- players_market_val_legacy
+- players_main_stats_legacy
+- general_info_team
+
+For silver DAGs, I create 1 DAG per 1 table
+
+For gold DAGs, I have 2 gold DAGs for male_player_legacy and 1 for male_team 
+
+male_coaches doesn't have any gold DAGs
+
+in gold DAGs there are 2 type of tasks
+1. create tables taks create table to config schemas as designed
+2. insert tasks to insert data in to a created table.
+
+
