@@ -1,8 +1,8 @@
-**###FIFA23 Data Engineering Pipeline**
+### FIFA23 Data Engineering Pipeline
 
 
 
-**##Overview**
+## Overview
 
 
 
@@ -14,7 +14,7 @@ The pipeline ingests FIFA23 datasets, performs data cleaning and transformation,
 
 
 
-**##Pipeline Flow**
+## Pipeline Flow
 
 
 
@@ -32,7 +32,7 @@ Gold layer creates analytical tables
 
 
 
-**##Project Structure**
+## Project Structure
 
 
 
@@ -50,7 +50,7 @@ README.md
 
 
 
-**##Tools:**
+## Tools:
 
 
 
@@ -70,7 +70,7 @@ README.md
 
 
 
-\##Description :
+## Description :
 
 
 In this project, I decided to use Docker to ensure a portable development environment. All required services are in the docker-compose.yml file, allowing the project to run without compatibility issues across different machines. Docker is also required because Apache Airflow and PostgreSQL are deployed as containers and communicate within the same Docker network.
@@ -79,13 +79,13 @@ In this project, I decided to use Docker to ensure a portable development enviro
 
 There are 4 csv files which I got from Kaggle.
 
-raw\_male\_players.csv
+'raw_male_players.csv'
 
-raw\_male\_teams.csv
+'raw_male_teams.csv'
 
-raw\_male\_coaches.csv
+'raw_male_coaches.csv'
 
-raw\_male\_players\_legacy.csv
+'raw_male_players_legacy.csv'
 
 
 
@@ -97,13 +97,13 @@ The data is then cleaned and transformed into a multi-layer data warehouse archi
 
 
 
-!\[Architecture](docs/sql\_schemas.png)
+![Architecture](docs/sqlschemas.png)
 
 
 
 &#x20;All transformations are implemented as Apache Airflow DAGs and can be triggered manually through the Airflow UI.
 
-!\[Airflow DAG Example](docs/airflow\_dag.png)
+![Airflow DAG Example](docs/airflowdag.png)
 
 
 
